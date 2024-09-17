@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Typing Speed Practice</title>
+    <style>
+      :root {
+        --bg-color: #121212;
+        --text-color: #e0e0e0;
+        --container-bg: #1e1e1e;
+        --accent-color: #ff5722;
+        --accent-hover: #e64a19;
+        --correct-color: #76ff03;
+        --pending-color: #9e9e9e;
+      }
+
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        font-family: "Roboto", sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+      }
+
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+
+      #container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        width: 90%;
+        height: 60vh;
+        max-width: 1200px;
+        margin-bottom: 30px;
+      }
+
+      #text-display,
+      #editor-container {
+        background-color: var(--container-bg);
+        padding: 15px;
+        border-radius: 8px;
+        overflow: auto;
+        height: 100%;
+      }
+
+      #text-display {
+        font-size: 18px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+      }
+
+      #speed-result {
+        margin-top: 20px;
+        font-size: 24px;
+        color: var(--correct-color);
+        text-align: center;
+      }
+
+      #controls {
+        margin-top: 20px;
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+
+      button {
+        padding: 10px 20px;
+        font-size: 16px;
+        margin: 5px;
+        cursor: pointer;
+        background-color: var(--accent-color);
+        color: #ffffff;
+        border: none;
+        border-radius: 5px;
+        transition: background-color 0.3s;
+      }
+
+      button:hover {
+        background-color: var(--accent-hover);
+      }
+
+      .correct {
+        color: var(--correct-color);
+      }
+      .pending {
+        color: var(--pending-color);
+      }
+
+      #modal {
+        display: none;
+        position: fixed;
+        z-index: 1;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0, 0, 0, 0.5);
+        padding-top: 60px;
+      }
+
+      #modal-content {
+        background-color: var(--container-bg);
+        margin: 5% auto;
+        padding: 20px;
+        border-radius: 8px;
+        width: 90%;
+        max-width: 600px;
+        color: var(--text-color);
+      }
+
+      .close {
+        color: var(--text-color);
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+      }
+
+      .close:hover,
+      .close:focus {
+        color: var(--accent-color);
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      textarea {
+        width: calc(100% - 20px);
+        border: 1px solid #444;
+        border-radius: 5px;
+        padding: 10px;
+        font-size: 16px;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        margin-top: 10px;
+      }
+
+      @media (max-width: 768px) {
+        #container {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Typing Speed Practice</h1>
+
+    <div id="container">
+      <div id="text-display"></div>
+      <div id="editor-container"></div>
+    </div>
+
+    <div id="controls">
+      <button id="restart-button">Restart</button>
+      <button id="change-text-button">Change Text</button>
+    </div>
+
+    <div id="speed-result"></div>
+
+    <div id="modal">
+      <div id="modal-content">
+        <span class="close" id="close-modal">&times;</span>
+        <h2>Change Text</h2>
+        <textarea
+          id="custom-text"
+          rows="10"
+          placeholder="Enter your custom text here..."
+        ></textarea>
+        <br />
+        <button id="save-text">Save</button>
+      </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs/loader.js"></script>
+    <script>
+      require.config({
+        paths: {
+          vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs",
+        },
+      });
+
+      require(["vs/editor/editor.main"], function () {
+        const TypingTest = {
+          testText: `#include <bits/stdc++.h>
+using namespace std;
+
+int main() {
+    int t;
+    cin >> t;
+
+    while(t--) {
+        int n;
+        cin >> n;
+
+        vector<int> arr(n);
+
+        for(int i = 0; i < n; i++) {
+            cin >> arr[i];
+        }
+
+        sort(arr.begin(), arr.end());
+
+        long long sum = 0;
+        bool cond = true;
+
+        for(int i = 0; i < n-1; i++) {
+            sum += arr[i];
+            if(arr[i+1] > sum) {
+                cond = false;
+                break;
+            }
+        }
+
+        cout << (cond && arr[0] == 1 ? "YES" : "NO") << endl;
+    }
+}`.replace(/\r\n/g, "\n"),
+          startTime: null,
+          endTime: null,
+          editor: null,
+          isTestActive: false,
+
+          init() {
+            this.cacheDOM();
+            this.createEditor();
+            this.bindEvents();
+            this.displayText();
+          },
+
+          cacheDOM() {
+            this.textDisplay = document.getElementById("text-display");
+            this.editorContainer = document.getElementById("editor-container");
+            this.speedResult = document.getElementById("speed-result");
+            this.restartButton = document.getElementById("restart-button");
+            this.changeTextButton =
+              document.getElementById("change-text-button");
+            this.modal = document.getElementById("modal");
+            this.closeModal = document.getElementById("close-modal");
+            this.saveTextButton = document.getElementById("save-text");
+            this.customTextArea = document.getElementById("custom-text");
+          },
+
+          createEditor() {
+            this.editor = monaco.editor.create(this.editorContainer, {
+              value: "",
+              language: "cpp",
+              theme: "vs-dark",
+              readOnly: false,
+              automaticLayout: true,
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              fontSize: 16,
+            });
+          },
+
+          bindEvents() {
+            this.editor.onDidChangeModelContent(
+              this.handleEditorChange.bind(this)
+            );
+            this.restartButton.addEventListener(
+              "click",
+              this.restart.bind(this)
+            );
+            this.changeTextButton.addEventListener(
+              "click",
+              this.showModal.bind(this)
+            );
+            this.closeModal.addEventListener(
+              "click",
+              this.hideModal.bind(this)
+            );
+            this.saveTextButton.addEventListener(
+              "click",
+              this.saveText.bind(this)
+            );
+          },
+
+          displayText() {
+            this.textDisplay.innerHTML = this.testText
+              .split("")
+              .map(
+                (char) =>
+                  `<span class="pending">${
+                    char === " " ? "&nbsp;" : char
+                  }</span>`
+              )
+              .join("");
+          },
+
+          handleEditorChange() {
+            if (!this.isTestActive) {
+              this.startTest();
+            }
+
+            const typedText = this.editor.getValue();
+            this.updateDisplay(typedText);
+            this.checkTestCompletion(typedText);
+          },
+
+          startTest() {
+            this.startTime = new Date();
+            this.isTestActive = true;
+            console.log("Test started at:", this.startTime);
+          },
+
+          updateDisplay(typedText) {
+            const spans = this.textDisplay.getElementsByTagName("span");
+            for (let i = 0; i < this.testText.length; i++) {
+              if (i < typedText.length) {
+                spans[i].className =
+                  typedText[i] === this.testText[i] ? "correct" : "pending";
+              } else {
+                spans[i].className = "pending";
+              }
+            }
+            this.scrollTextDisplay();
+          },
+
+          scrollTextDisplay() {
+            const currentCharSpan =
+              this.textDisplay.querySelector("span.pending");
+            if (currentCharSpan) {
+              const scrollAmount =
+                currentCharSpan.offsetTop - this.textDisplay.clientHeight / 2;
+              this.textDisplay.scrollTop = scrollAmount;
+            }
+          },
+
+          checkTestCompletion(typedText) {
+            if (typedText === this.testText) {
+              this.endTest();
+            }
+          },
+
+          endTest() {
+            this.endTime = new Date();
+            this.isTestActive = false;
+            console.log("Test ended at:", this.endTime);
+            this.calculateAndDisplayResult();
+            this.editor.updateOptions({ readOnly: true });
+          },
+
+          calculateAndDisplayResult() {
+            const timeTaken = (this.endTime - this.startTime) / 1000; // in seconds
+            const wpm = this.calculateWPM(timeTaken);
+
+            this.speedResult.innerHTML = `
+                        Speed: ${wpm.toFixed(2)} WPM<br>
+                        Time taken: ${timeTaken.toFixed(2)} seconds
+                    `;
+          },
+
+          calculateWPM(timeTaken) {
+            return this.testText.length / 5 / (timeTaken / 60);
+          },
+
+          restart() {
+            this.editor.setValue("");
+            this.editor.updateOptions({ readOnly: false });
+            this.startTime = null;
+            this.endTime = null;
+            this.isTestActive = false;
+            this.speedResult.innerHTML = "";
+            this.displayText();
+            this.editor.focus();
+          },
+
+          showModal() {
+            this.modal.style.display = "block";
+            this.customTextArea.value = this.testText;
+          },
+
+          hideModal() {
+            this.modal.style.display = "none";
+          },
+
+          saveText() {
+            const newText = this.customTextArea.value.trim();
+            if (newText) {
+              this.testText = newText.replace(/\r\n/g, "\n");
+              this.restart();
+              this.hideModal();
+            }
+          },
+        };
+
+        TypingTest.init();
+      });
+    </script>
+  </body>
+</html>
